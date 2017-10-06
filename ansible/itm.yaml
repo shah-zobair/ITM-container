@@ -1,0 +1,5 @@
+---
+- name: do snmp atomic install
+  hosts: masters
+  roles:
+     - itm
