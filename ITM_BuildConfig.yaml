@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  name: itm
+  namespace: bac-staging
+spec:
+  nodeSelector: null
+  output:
+    to:
+      kind: DockerImage
+      name: docker-registry-lab.sdi.corp.example.com:6555/asa/itm:rc
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    git:
+      uri: https://git-ti.example.com:8443/scm/openshift/itm.git
+    sourceSecret:
+      name: bacca
+    type: Git
+  strategy:
+    dockerStrategy:
+      from:
+        kind: ImageStreamTag
+        name: rhel7:latest
+        namespace: bac
+    type: Docker
+  triggers: []
