@@ -1,0 +1,84 @@
+---
+
+- name: Detecting Operating System
+  stat:
+    path: /run/ostree-booted
+  register: ostree_booted
+
+# Locally setup containerized facts for now
+- set_fact:
+    is_atomic: "{{ ostree_booted.stat.exists }}"
+- set_fact:
+    is_containerized: "{{ (is_atomic | bool) or (containerized | default(false) | bool) }}"
+
+- block:
+
+  - name: Check if itm already running
+    shell: docker ps
+    register: docker_pre_ps
+    changed_when: false
+    ignore_errors: true
+    failed_when: false
+
+  - name: Check if itm container was running and/or exited
+    shell: docker ps -a -f status=exited -f status=dead | grep itm
+    register: docker_all_ps
+    changed_when: false
+    ignore_errors: true
+    failed_when: false
+
+  - name: Remove dead itm container
+    shell: docker rm $(docker ps -a | grep itm | cut -f1 -d " ")
+    when: '"itm" in docker_all_ps.stdout'
+
+  - name: Pull the asa/itm image
+    docker_image:
+      name: asa/itm:rc
+      pull: yes
+      state: present
+      cacert_path: no
+    changed_when: false
+
+  - name: Create the host tools directory
+    shell: mkdir -p /var/tools/tivoli/ITM
+    ignore_errors: true
+
+#  - name: Run itm container
+#    shell: docker run --restart=always -it --name itm --privileged --ipc=host --net=host --pid=host -e HOST=/host -e NAME=itm -e IMAGE=itm -v /run:/run -v /var/log:/var/log -v /etc/localtime:/etc/localtime -v /:/host -v /var/tools:/tools -d itm tail -f /dev/null
+#    when: '"itm" not in docker_pre_ps.stdout'
+
+  - name: Run itm container if not running
+    docker_container:
+      name: itm
+      image: asa/itm
+      restart_policy: always
+      restart_retries: 3
+      recreate: yes
+      privileged: true
+      ipc_mode: host
+      network_mode: host
+      pid_mode: host
+      env:
+         HOST: /host
+         NAME: itm
+         IMAGE: itm
+      volumes:
+       - /run:/run
+       - /var/log:/var/log
+       - /etc/localtime:/etc/localtime
+       - /:/host
+       - /var/tools:/tools
+      detach: yes
+      tty: true
+      state: started
+      command: tail -f /dev/null
+    when: '"itm" not in docker_pre_ps.stdout'
+
+  - name: Get docker ps output
+    shell: docker ps
+    register: docker_ps
+    changed_when: false
+    ignore_errors: true
+    failed_when: '"itm" not in docker_ps.stdout'
+
+  when: is_containerized | bool
